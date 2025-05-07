@@ -1,0 +1,43 @@
+# Node modules
+/node_modules/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Environment files
+.env
+
+# npm package lock
+package-lock.json
+
+# TypeScript build output
+dist/
+build/
+
+# IDE or OS-specific files
+.vscode/
+.idea/
+.DS_Store
+
+# Test output
+coverage/
+
+# Temporary or generated files
+*.tgz
+*.swp
+
+# Ignore processed trade queue backup files
+*.backup.*.processed
+
+# Ignore trade queue backup JSON files
+trade_queue_backup.json
+trade_queue_backup.json.*
+token_info_queue_backup.json
+token_info_queue_backup.json.*
+
+# (Optional) If you have other backup types you want ignored, list them similarly
+node_modules
+node_modules
+node_modules

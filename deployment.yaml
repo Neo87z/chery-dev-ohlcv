@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cherry-ohlcv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cherry-ohlcv
+  template:
+    metadata:
+      labels:
+        app: cherry-ohlcv
+    spec:
+      containers:
+      - name: cherry-ohlcv
+        image: ohlcv-system-nodejs-clickhouse-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "development"
+        - name: CLICKHOUSE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: clickhouse-url
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: clickhouse-user
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: clickhouse-password
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: RATE_LIMIT_POINTS
+          value: "120"
+        - name: RATE_LIMIT_DURATION
+          value: "60"
+        - name: API_TIMEOUT
+          value: "30000"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
