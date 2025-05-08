@@ -82,7 +82,7 @@ const startServer = async () => {
     logger.info('ClickHouse trade model initialized');
 
     // Connect to Cherry Tracer
-    //connectToCherryTracer(tradeModel);
+    connectToCherryTracer(tradeModel);
     logger.info('Connected to Cherry Tracer');
 
     logger.info(`OHLCV service initialized with ${OHLCV_UPDATE_INTERVAL_MINUTES} minute update interval`);
