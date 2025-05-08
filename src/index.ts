@@ -5,6 +5,7 @@ import cors from 'cors';
 import { config } from 'dotenv';
 import http from 'http';
 import { connectToCherryTracer } from './websockets/pumpFunTracer';
+import { TradeModel } from '../src/models/trade';
 import { setupClickhouse } from './config/db';
 
 // Load environment variables
@@ -14,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 let clickhouseClient: any;
-
+let tradeModel: TradeModel;
 
 // ---------- Middleware ----------
 app.use(helmet());
@@ -74,15 +75,7 @@ server.listen(PORT, () => {
 // Initialize ClickHouse and connect to Cherry Tracer
 const initServices = async () => {
   try {
-    clickhouseClient = await setupClickhouse();
-    if (clickhouseClient) {
-      //TradeModel.initializeQueue(clickhouseClient);
-      //tradeModel = new TradeModel(clickhouseClient);
-      //connectToCherryTracer(tradeModel);
-      console.log('Connected to Cherry Tracer with TradeModel');
-    } else {
-      console.error('ClickHouse initialization failed');
-    }
+    
   } catch (error) {
     console.error('Error initializing services:', error instanceof Error ? error.stack : error);
   }
