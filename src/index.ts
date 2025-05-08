@@ -7,7 +7,7 @@ import { setupClickhouse } from './config/db';
 import { logger } from './config/logger';
 import routes from './routes';
 import { connectToCherryTracer } from './websockets/pumpFunTracer';
-import { TradeModel } from '../src/models/trade';
+//import { TradeModel } from '../src/models/trade';
 import http from 'http';
 
 config();
@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 const OHLCV_UPDATE_INTERVAL_MINUTES = process.env.OHLCV_UPDATE_INTERVAL_MINUTES || 1;
 
 let clickhouseClient: any;
-let tradeModel: TradeModel;
+//let tradeModel: TradeModel;
 
 // ---------- Middleware ----------
 app.use(helmet());
