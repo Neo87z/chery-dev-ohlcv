@@ -2,8 +2,6 @@ import { ClickHouseClient } from '@clickhouse/client';
 import { Trade } from '../types/database';
 import { TradeQueryParams } from '../types/api';
 import { logger } from '../config/logger';
-import * as fs from 'fs';
-import * as path from 'path';
 
 interface OHLCV {
   timestamp: string;
@@ -44,10 +42,6 @@ class TradeQueue {
   private readonly CHUNK_SIZE = 2000;
   private readonly RETRY_CHUNK_SIZE = 1000;
   private readonly MAX_QUEUE_SIZE = 1000000;
-  private readonly PERSISTENCE_FILE = path.join(process.cwd(), 'trade_queue_backup.json');
-  private readonly PERSISTENCE_THRESHOLD = 10000;
-  private readonly MAX_BACKUP_FILES = 2;
-  private persistencePending: boolean = false;
 
   private tradesInserted: number = 0;
   private tradesAttempted: number = 0;
@@ -66,8 +60,6 @@ class TradeQueue {
     this.mergerInterval = setInterval(() => this.runMergerScript(), 30000);
 
     setInterval(() => this.resetOldMetrics(), 10000);
-    this.loadPersistedTrades();
-    setInterval(() => this.cleanupBackupFiles(), 3600000);
   }
 
   public static getInstance(): TradeQueue {
@@ -114,33 +106,48 @@ class TradeQueue {
       this.makeSpaceInQueue(1);
     }
     this.queue.push(trade);
-    if (this.queue.length % this.PERSISTENCE_THRESHOLD === 0) {
-      this.schedulePersistence();
-    }
   }
 
   private makeSpaceInQueue(requiredSpace: number) {
     const totalQueueSize = this.queue.length + this.backupQueue.length;
-    if (totalQueueSize >= this.MAX_QUEUE_SIZE) {
-      const spaceNeeded = Math.max(requiredSpace, Math.ceil(this.MAX_QUEUE_SIZE * 0.1));
-      if (this.queue.length > spaceNeeded * 2) {
-        this.throttledLog('warn', `Making space in queue by dropping ${spaceNeeded} oldest trades from main queue`);
-        this.queue = this.queue.slice(spaceNeeded);
-      } else if (this.backupQueue.length > spaceNeeded) {
-        this.throttledLog('warn', `Making space in queue by dropping ${spaceNeeded} oldest trades from backup queue`);
-        this.backupQueue = this.backupQueue.slice(spaceNeeded);
-      } else {
-        const mainQueuePortion = Math.ceil((this.queue.length / totalQueueSize) * spaceNeeded);
-        const backupQueuePortion = spaceNeeded - mainQueuePortion;
-        if (mainQueuePortion > 0 && this.queue.length > mainQueuePortion) {
-          this.queue = this.queue.slice(mainQueuePortion);
-        }
-        if (backupQueuePortion > 0 && this.backupQueue.length > backupQueuePortion) {
-          this.backupQueue = this.backupQueue.slice(backupQueuePortion);
-        }
-        this.throttledLog('warn', `Made space by dropping ${mainQueuePortion} trades from main queue and ${backupQueuePortion} from backup queue`);
+    if (totalQueueSize < this.MAX_QUEUE_SIZE) {
+      return; // No need to make space if below max size
+    }
+  
+    // Ensure at least 10% of MAX_QUEUE_SIZE is cleared, or the required space
+    const spaceNeeded = Math.max(requiredSpace, Math.ceil(this.MAX_QUEUE_SIZE * 0.1));
+  
+    // Case 1: Main queue has enough trades to drop
+    if (this.queue.length > spaceNeeded * 2) {
+      this.throttledLog('warn', `Making space in queue by dropping ${spaceNeeded} oldest trades from main queue`, {
+        service: "Cherry-OHLCV"
+      });
+      this.queue = this.queue.slice(spaceNeeded);
+    }
+    // Case 2: Backup queue has enough trades to drop
+    else if (this.backupQueue.length > spaceNeeded) {
+      this.throttledLog('warn', `Making space in queue by dropping ${spaceNeeded} oldest trades from backup queue`, {
+        service: "Cherry-OHLCV"
+      });
+      this.backupQueue = this.backupQueue.slice(spaceNeeded);
+    }
+    // Case 3: Distribute dropping across both queues
+    else {
+      // Avoid division by zero
+      const mainQueueRatio = totalQueueSize > 0 ? this.queue.length / totalQueueSize : 0.5;
+      const mainQueuePortion = Math.ceil(mainQueueRatio * spaceNeeded);
+      const backupQueuePortion = spaceNeeded - mainQueuePortion;
+  
+      if (mainQueuePortion > 0 && this.queue.length >= mainQueuePortion) {
+        this.queue = this.queue.slice(mainQueuePortion);
       }
-      this.schedulePersistence();
+      if (backupQueuePortion > 0 && this.backupQueue.length >= backupQueuePortion) {
+        this.backupQueue = this.backupQueue.slice(backupQueuePortion);
+      }
+  
+      this.throttledLog('warn', `Made space by dropping ${mainQueuePortion} trades from main queue and ${backupQueuePortion} from backup queue`, {
+        service: "Cherry-OHLCV"
+      });
     }
   }
 
@@ -154,9 +161,6 @@ class TradeQueue {
     }
     this.queue.push(...trades);
     this.throttledLog('info', `Added ${trades.length} trades to queue (total size: ${this.queue.length + this.backupQueue.length})`);
-    if (this.queue.length >= this.PERSISTENCE_THRESHOLD) {
-      this.schedulePersistence();
-    }
   }
 
   public canAcceptMoreTrades(): boolean {
@@ -173,97 +177,13 @@ class TradeQueue {
       const keepBackupSize = Math.floor(this.backupQueue.length * 0.7);
       this.backupQueue = this.backupQueue.slice(-keepBackupSize);
       this.throttledLog('warn', `Reduced queue sizes to: main=${this.queue.length}, backup=${this.backupQueue.length}`);
-      this.schedulePersistence();
-    }
-  }
-
-  private schedulePersistence() {
-    if (!this.persistencePending) {
-      this.persistencePending = true;
-      setTimeout(() => {
-        this.persistTrades();
-        this.persistencePending = false;
-      }, 5000);
-    }
-  }
-
-  private async persistTrades() {
-    if (this.queue.length === 0 && this.backupQueue.length === 0) {
-      return;
-    }
-    try {
-      if (fs.existsSync(this.PERSISTENCE_FILE)) {
-        const backupFile = `${this.PERSISTENCE_FILE}.${Date.now()}.bak`;
-        await fs.promises.rename(this.PERSISTENCE_FILE, backupFile);
-        this.throttledLog('info', `Rotated backup file to ${backupFile}`);
-      }
-
-      const dataToSave = {
-        queue: this.queue,
-        backupQueue: this.backupQueue,
-        timestamp: new Date().toISOString()
-      };
-      await fs.promises.writeFile(this.PERSISTENCE_FILE, JSON.stringify(dataToSave), 'utf8');
-      this.throttledLog('info', `Persisted ${this.queue.length + this.backupQueue.length} trades to disk`);
-    } catch (error) {
-      this.throttledLog('error', 'Failed to persist trade queue:', { error, service: "Cherry-OHLCV" });
-    }
-  }
-
-  private async loadPersistedTrades() {
-    try {
-      if (fs.existsSync(this.PERSISTENCE_FILE)) {
-        const data = await fs.promises.readFile(this.PERSISTENCE_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        if (parsed.queue && Array.isArray(parsed.queue)) {
-          this.queue = parsed.queue;
-        }
-        if (parsed.backupQueue && Array.isArray(parsed.backupQueue)) {
-          this.backupQueue = parsed.backupQueue;
-        }
-        this.throttledLog('info', `Loaded ${this.queue.length + this.backupQueue.length} persisted trades from disk`);
-        if (this.queue.length > 0 || this.backupQueue.length > 0) {
-          setTimeout(() => {
-            if (!this.isMerging && !this.connectionFailed) {
-              this.flushQueue();
-            }
-          }, 2000);
-        }
-      }
-    } catch (error) {
-      this.throttledLog('error', 'Failed to load persisted trades:', { error, service: "Cherry-OHLCV" });
-    }
-  }
-
-  private async cleanupBackupFiles() {
-    try {
-      const files = await fs.promises.readdir(process.cwd());
-      const backupFiles = files
-        .filter(f => f.startsWith('trade_queue_backup.json.') && f.endsWith('.bak'))
-        .map(f => ({
-          name: f,
-          mtime: fs.statSync(path.join(process.cwd(), f)).mtime.getTime()
-        }))
-        .sort((a, b) => b.mtime - a.mtime);
-
-      let deletedCount = 0;
-      for (let i = this.MAX_BACKUP_FILES - 1; i < backupFiles.length; i++) {
-        const filePath = path.join(process.cwd(), backupFiles[i].name);
-        await fs.promises.unlink(filePath);
-        deletedCount++;
-      }
-
-      if (deletedCount > 0) {
-        this.throttledLog('info', `Cleaned up ${deletedCount} old trade queue backup files`, { service: "Cherry-OHLCV" });
-      }
-    } catch (error) {
-      this.throttledLog('error', 'Error cleaning up backup files:', { error, service: "Cherry-OHLCV" });
     }
   }
 
   private async runMergerScript() {
     this.isMerging = false;
   }
+
   private async flushQueue() {
     if (this.queue.length === 0 || this.isProcessing || this.connectionFailed || this.isMerging) {
       return;
@@ -315,7 +235,6 @@ class TradeQueue {
       this.queue = this.queue.slice(this.CHUNK_SIZE);
       this.connectionFailed = true;
       this.connectionAttempts++;
-      this.schedulePersistence();
       const backoffDelay = this.RETRY_DELAY_MS * Math.min(Math.pow(2, this.connectionAttempts - 1), 60);
       this.throttledLog('warn', `Connection failed, will retry in ${backoffDelay/1000} seconds (attempt ${this.connectionAttempts})`);
       setTimeout(() => {
@@ -363,7 +282,6 @@ class TradeQueue {
       this.backupQueue = [...failedRetries, ...this.backupQueue];
       this.connectionFailed = true;
       this.connectionAttempts++;
-      this.schedulePersistence();
       const backoffDelay = this.RETRY_DELAY_MS * Math.min(Math.pow(2, this.connectionAttempts - 1), 60);
       this.throttledLog('warn', `Retry failed, will attempt again in ${backoffDelay/1000} seconds (attempt ${this.connectionAttempts})`);
     } finally {
@@ -376,11 +294,10 @@ class TradeQueue {
     clearInterval(this.retryInterval);
     clearInterval(this.memoryCheckInterval);
     clearInterval(this.mergerInterval);
-    this.persistTrades();
     if (this.queue.length > 0 && !this.connectionFailed && !this.isMerging) {
       this.flushQueue();
     }
-    logger.warn(`Trade queue shut down. ${this.queue.length + this.backupQueue.length} trades remaining in queue and persisted to disk.`, { service: "Cherry-OHLCV" });
+    logger.warn(`Trade queue shut down. ${this.queue.length + this.backupQueue.length} trades remaining in queue.`, { service: "Cherry-OHLCV" });
   }
 
   public getStats() {
@@ -401,7 +318,6 @@ class TradeQueue {
       utilization: ((this.queue.length + this.backupQueue.length) / this.MAX_QUEUE_SIZE) * 100,
       connectionStatus: this.connectionFailed ? 'failed' : 'ok',
       retryAttempts: this.connectionAttempts,
-      persistedStatus: this.persistencePending ? 'pending' : 'ready',
       mergerStatus: this.isMerging ? 'running' : 'idle',
       tradesInserted: this.tradesInserted,
       tradesAttempted: this.tradesAttempted,
@@ -596,6 +512,7 @@ export class TradeModel {
       throw error;
     }
   }
+
   async queueTrade(trade: Omit<Trade, 'trade_id'> | Omit<Trade, 'trade_id'>[]): Promise<void> {
     if (Array.isArray(trade)) {
       console.log('handle array of trades');
