@@ -102,7 +102,7 @@ const startServer = async () => {
     // Don't exit the process on initialization errors since server is already running
     // This prevents Heroku from cycling the dyno unnecessarily
     // Just log the error and continue with limited functionality
-    logger.error('Server running with limited functionality due to initialization error');
+    logger.error('Server running with limitedfunctionality due to initialization error');
   }
 };
 
