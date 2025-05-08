@@ -7,7 +7,7 @@ import { setupClickhouse } from './config/db';
 import { logger } from './config/logger';
 import routes from './routes';
 import { connectToCherryTracer } from './websockets/pumpFunTracer';
-import { TradeModel } from '../src/models/trade';
+import { TradeModel } from './models/trade';
 import http from 'http';
 
 // Load environment variables first
