@@ -6,8 +6,7 @@ logs/
 *.log
 *.log.*
 
-# Environment files
-.env
+
 
 # npm package lock
 package-lock.json
