@@ -3,16 +3,18 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import { config } from 'dotenv';
-import http from 'http';
+import { setupClickhouse } from './config/db';
+import { logger } from './config/logger';
+import routes from './routes';
 import { connectToCherryTracer } from './websockets/pumpFunTracer';
 import { TradeModel } from '../src/models/trade';
-import { setupClickhouse } from './config/db';
+import http from 'http';
 
-// Load environment variables
 config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const OHLCV_UPDATE_INTERVAL_MINUTES = process.env.OHLCV_UPDATE_INTERVAL_MINUTES || 1;
 
 let clickhouseClient: any;
 let tradeModel: TradeModel;
@@ -24,30 +26,28 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 // ---------- Routes ----------
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, World!');
-});
-
 app.get('/health', async (req: Request, res: Response) => {
   try {
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      clickhouse: clickhouseClient ? 'connected' : 'disconnected'
+      clickhouse: clickhouseClient ? 'connected' : 'disconnected',
     });
   } catch (error) {
-    console.error('Health check failed:', error instanceof Error ? error.stack : error);
+    logger.error('Health check failed:', { error: error instanceof Error ? error.stack : error });
     res.status(500).json({
       status: 'degraded',
       timestamp: new Date().toISOString(),
-      message: 'Health check failed'
+      message: 'Health check failed',
     });
   }
 });
 
+app.use('/api', routes);
+
 // ---------- Global Error Handler ----------
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error(`Unhandled error: ${err.message}`, {
+  logger.error(`Unhandled error: ${err.message}`, {
     path: req.path,
     method: req.method,
     error: err.stack,
@@ -63,30 +63,44 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 // ---------- Server Setup ----------
 const server = http.createServer(app);
 
-// Set server timeouts
-server.keepAliveTimeout = 65000; // 65 seconds
-server.headersTimeout = 66000; // 66 seconds
-
-// Start the server
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// Initialize ClickHouse and connect to Cherry Tracer
-const initServices = async () => {
+// ---------- Startup Routine ----------
+const startServer = async () => {
   try {
+    // Start server immediately to bind to $PORT
+    server.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+    });
+
+    // Perform heavy initialization concurrently
     clickhouseClient = await setupClickhouse();
-    if (clickhouseClient) {
-      TradeModel.initializeQueue(clickhouseClient);
-      tradeModel = new TradeModel(clickhouseClient);
-      //connectToCherryTracer(tradeModel);
-      console.log('Connected to Cherry Tracer with TradeModel');
-    } else {
-      console.error('ClickHouse initialization failed');
-    }
+    if (!clickhouseClient) throw new Error('ClickHouse initialization failed');
+    logger.info('ClickHouse client initialized');
+
+    // Initialize ClickHouse models
+    TradeModel.initializeQueue(clickhouseClient);
+    tradeModel = new TradeModel(clickhouseClient);
+    logger.info('ClickHouse trade model initialized');
+
+    // Connect to Cherry Tracer
+    //connectToCherryTracer(tradeModel);
+    logger.info('Connected to Cherry Tracer');
+
+    logger.info(`OHLCV service initialized with ${OHLCV_UPDATE_INTERVAL_MINUTES} minute update interval`);
   } catch (error) {
-    console.error('Error initializing services:', error instanceof Error ? error.stack : error);
+    logger.error('Fatal error during startup:', error);
+    process.exit(1);
   }
 };
 
-initServices();
+// ---------- Global Error Listeners ----------
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Rejection:', reason);
+  process.exit(1);
+});
+
+startServer();
