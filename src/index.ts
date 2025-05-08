@@ -75,7 +75,15 @@ server.listen(PORT, () => {
 // Initialize ClickHouse and connect to Cherry Tracer
 const initServices = async () => {
   try {
-    
+    clickhouseClient = await setupClickhouse();
+    if (clickhouseClient) {
+      TradeModel.initializeQueue(clickhouseClient);
+      //tradeModel = new TradeModel(clickhouseClient);
+      //connectToCherryTracer(tradeModel);
+      console.log('Connected to Cherry Tracer with TradeModel');
+    } else {
+      console.error('ClickHouse initialization failed');
+    }
   } catch (error) {
     console.error('Error initializing services:', error instanceof Error ? error.stack : error);
   }
