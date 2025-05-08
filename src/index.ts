@@ -65,31 +65,7 @@ const server = http.createServer(app);
 
 // ---------- Startup Routine ----------
 const startServer = async () => {
-  try {
-    // Start server immediately to bind to $PORT
-    server.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
-    });
 
-    // Perform heavy initialization concurrently
-    clickhouseClient = await setupClickhouse();
-    if (!clickhouseClient) throw new Error('ClickHouse initialization failed');
-    logger.info('ClickHouse client initialized');
-
-    // Initialize ClickHouse models
-    TradeModel.initializeQueue(clickhouseClient);
-    tradeModel = new TradeModel(clickhouseClient);
-    logger.info('ClickHouse trade model initialized');
-
-    // Connect to Cherry Tracer
-    connectToCherryTracer(tradeModel);
-    logger.info('Connected to Cherry Tracer');
-
-    logger.info(`OHLCV service initialized with ${OHLCV_UPDATE_INTERVAL_MINUTES} minute update interval`);
-  } catch (error) {
-    logger.error('Fatal error during startup:', error);
-    process.exit(1);
-  }
 };
 
 // ---------- Global Error Listeners ----------
