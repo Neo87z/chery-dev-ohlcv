@@ -19,9 +19,9 @@ export async function setupClickhouse(options: SetupClickhouseOptions = {}): Pro
   }
 
   const {
-    host =  'https://xy7dt4ybk1.eastus2.azure.clickhouse.cloud:8443',
-    username =  'default',
-    password = 'LxY5QpCs7q~pD',
+    host = process.env.CLICKHOUSE_URL ?? 'https://xy7dt4ybk1.eastus2.azure.clickhouse.cloud:8443',
+    username = process.env.CLICKHOUSE_USER ?? 'default',
+    password = process.env.CLICKHOUSE_PASSWORD ?? 'LxY5QpCs7q~pD',
     clickhouse_settings = {
       max_execution_time: 30,
       max_threads: 8,

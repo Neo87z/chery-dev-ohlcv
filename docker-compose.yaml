@@ -23,22 +23,8 @@ services:
       - ./src:/app/src
       - ./dist:/app/dist
     command: nodemon
-    depends_on:
-      - redis
     networks:
       - app-network
-
-  redis:
-    image: redis:7.0-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - app-network
-
-volumes:
-  redis-data:
 
 networks:
   app-network:
