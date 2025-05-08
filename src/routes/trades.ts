@@ -1,7 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { setupClickhouse } from '../config/db';
 import { TradeModel } from '../models/trade';
-import { cacheMiddleware, invalidateCache } from '../middleware/cache';
 import { formatResponse } from '../utils/responseFormatter';
 import { logger } from '../config/logger';
 import { ApiError } from '../middleware/errorHandler';
@@ -22,7 +21,7 @@ const router = Router();
   }
 })();
 
-router.get('/get-all-trades', cacheMiddleware(30), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/get-all-trades', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const params: TradeQueryParams = {
       limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
@@ -143,7 +142,6 @@ const validateOHLCVBody = [
 ];
 router.post('/ohlcv', 
   validateOHLCVBody,
-  cacheMiddleware(30),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);

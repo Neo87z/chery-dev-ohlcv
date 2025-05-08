@@ -1,26 +1,33 @@
-# Use a lightweight node image
-FROM node:18-alpine
+# Use official Node.js 20 LTS as the base image
+FROM node:20-alpine
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
+# Copy package.json and package-lock.json (if exists)
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Install nodemon globally to auto-restart the app
+# Copy TypeScript configuration and source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# Copy nodemon configuration for development
+COPY nodemon.json ./
+
+# Install nodemon globally for development
 RUN npm install -g nodemon
 
-# Copy the rest of the application files
-COPY . .
+# Compile TypeScript to JavaScript and check for errors
+RUN npm run build || { echo "TypeScript compilation failed"; exit 1; }
 
-# Run TypeScript build (if you're using TypeScript)
-RUN npm run build
+# Verify dist/index.js exists
+RUN test -f dist/index.js || { echo "dist/index.js not found"; exit 1; }
 
 # Expose the application port
 EXPOSE 3000
 
-# Use nodemon to start the application (in development mode)
-CMD ["nodemon", "dist/index.js"]
+# Command to run the application (overridden in docker-compose for dev/prod)
+CMD ["node", "dist/index.js"]

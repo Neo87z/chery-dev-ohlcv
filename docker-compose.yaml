@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - LOG_LEVEL=info
+      - CLICKHOUSE_URL=https://xy7dt4ybk1.eastus2.azure.clickhouse.cloud:8443
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=LxY5QpCs7q~pD
+      - RATE_LIMIT_POINTS=120
+      - RATE_LIMIT_DURATION=60
+      - API_TIMEOUT=30000
+      - TELEGRAM_BOT_TOKEN=8087435064:AAEWETcMIHkIL7SI2OtO5Rg_Rq-Q-D7lxzQ
+      - TELEGRAM_CHAT_ID=1872497855
+    volumes:
+      - ./src:/app/src
+      - ./dist:/app/dist
+    command: nodemon
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+volumes:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge

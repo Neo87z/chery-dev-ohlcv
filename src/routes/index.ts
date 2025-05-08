@@ -1,10 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import contractRoutes from './contracts';
-import tokenRoutes from './tokens';
-import tokenRoutesPost from './token_postgres';
+
 //import pairRoutes from './pairs';
 import tradeRoutes from './trades';
-import candleRoutes from './candles';
+
 import { rateLimitMiddleware } from '../middleware/rateLimit';
 import { errorHandler, ApiError } from '../middleware/errorHandler';
 import { logger } from '../config/logger';
@@ -15,12 +13,10 @@ const router = Router();
 //router.use(rateLimitMiddleware);
 
 
-router.use('/contracts', contractRoutes);
-router.use('/tokens', tokenRoutes);
+
 //router.use('/pairs', pairRoutes);
 router.use('/trades', tradeRoutes);
-router.use('/candles', candleRoutes);
-router.use('/tokens-post', tokenRoutesPost);
+
 
 
 
