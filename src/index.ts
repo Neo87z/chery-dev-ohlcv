@@ -78,7 +78,7 @@ const initServices = async () => {
     clickhouseClient = await setupClickhouse();
     if (clickhouseClient) {
       TradeModel.initializeQueue(clickhouseClient);
-      //tradeModel = new TradeModel(clickhouseClient);
+      tradeModel = new TradeModel(clickhouseClient);
       //connectToCherryTracer(tradeModel);
       console.log('Connected to Cherry Tracer with TradeModel');
     } else {
