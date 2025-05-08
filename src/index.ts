@@ -4,12 +4,18 @@ import compression from 'compression';
 import cors from 'cors';
 import { config } from 'dotenv';
 import http from 'http';
+import { connectToCherryTracer } from './websockets/pumpFunTracer';
+import { TradeModel } from '../src/models/trade';
 
 // Load environment variables
 config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Create a minimal trade model for Cherry Tracer
+// @ts-ignore - We're creating a simplified version for the tracer
+const dummyTradeModel = new TradeModel(null);
 
 // ---------- Middleware ----------
 app.use(helmet());
@@ -19,7 +25,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // ---------- Routes ----------
 app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, World uooo!');
+  res.send('Hello, World!');
 });
 
 app.get('/health', async (req: Request, res: Response) => {
@@ -62,5 +68,8 @@ server.headersTimeout = 66000; // 66 seconds
 
 // Start the server
 server.listen(PORT, () => {
-  console.log(`Server running on port  ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
+
+// Connect to Cherry Tracer
+connectToCherryTracer(dummyTradeModel);
