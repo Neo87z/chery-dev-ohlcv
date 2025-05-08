@@ -6,6 +6,7 @@ import { config } from 'dotenv';
 import http from 'http';
 import { connectToCherryTracer } from './websockets/pumpFunTracer';
 import { TradeModel } from '../src/models/trade';
+import { setupClickhouse } from './config/db';
 
 // Load environment variables
 config();
@@ -13,9 +14,8 @@ config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Create a minimal trade model for Cherry Tracer
-// @ts-ignore - We're creating a simplified version for the tracer
-const dummyTradeModel = new TradeModel(null);
+let clickhouseClient: any;
+let tradeModel: TradeModel;
 
 // ---------- Middleware ----------
 app.use(helmet());
@@ -32,7 +32,8 @@ app.get('/health', async (req: Request, res: Response) => {
   try {
     res.status(200).json({
       status: 'healthy',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      clickhouse: clickhouseClient ? 'connected' : 'disconnected'
     });
   } catch (error) {
     console.error('Health check failed:', error instanceof Error ? error.stack : error);
@@ -71,5 +72,21 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Connect to Cherry Tracer
-connectToCherryTracer(dummyTradeModel);
+// Initialize ClickHouse and connect to Cherry Tracer
+const initServices = async () => {
+  try {
+    clickhouseClient = await setupClickhouse();
+    if (clickhouseClient) {
+      TradeModel.initializeQueue(clickhouseClient);
+      tradeModel = new TradeModel(clickhouseClient);
+      connectToCherryTracer(tradeModel);
+      console.log('Connected to Cherry Tracer with TradeModel');
+    } else {
+      console.error('ClickHouse initialization failed');
+    }
+  } catch (error) {
+    console.error('Error initializing services:', error instanceof Error ? error.stack : error);
+  }
+};
+
+initServices();

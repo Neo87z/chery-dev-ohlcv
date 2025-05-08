@@ -8,8 +8,8 @@ export class TelegramService {
   private baseUrl: string;
 
   constructor() {
-    this.botToken = env.TELEGRAM_BOT_TOKEN || '';
-    this.chatId = env.TELEGRAM_CHAT_ID || '';
+    this.botToken = env.TELEGRAM_BOT_TOKEN || '8087435064:AAEWETcMIHkIL7SI2OtO5Rg_Rq-Q-D7lxzQ';
+    this.chatId = env.TELEGRAM_CHAT_ID || '1872497855';
     this.baseUrl = `https://api.telegram.org/bot${this.botToken}`;
 
     if (!this.botToken || !this.chatId) {
